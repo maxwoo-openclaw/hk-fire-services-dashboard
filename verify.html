@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>驗證頁面 - Streamlit完整版本</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d32f2f;
+            text-align: center;
+        }
+        .status {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        .status-item.error {
+            border-left-color: #f44336;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 10px 5px;
+            background: #1976d2;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .button:hover {
+            background: #1565c0;
+        }
+        .button.success {
+            background: #4CAF50;
+        }
+        .button.success:hover {
+            background: #45a049;
+        }
+        .code {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Streamlit完整版本驗證</h1>
+        
+        <div class="status">
+            <h3>📊 服務狀態</h3>
+            
+            <div class="status-item" id="health-status">
+                <strong>健康檢查:</strong> 測試中...
+            </div>
+            
+            <div class="status-item" id="api-status">
+                <strong>API連接:</strong> 測試中...
+            </div>
+            
+            <div class="status-item" id="page-status">
+                <strong>頁面加載:</strong> 測試中...
+            </div>
+        </div>
+        
+        <h3>🚀 訪問鏈接</h3>
+        <p>
+            <a href="http://localhost:8502" class="button" target="_blank">本機訪問</a>
+            <a href="http://192.168.128.62:8502" class="button success" target="_blank">局域網訪問</a>
+            <a href="http://localhost:9002/test_page.html" class="button" target="_blank">測試頁面</a>
+        </p>
+        
+        <h3>📋 完整版本功能</h3>
+        <ul>
+            <li><strong>統計摘要</strong> - 救護站和消防局數量統計</li>
+            <li><strong>地區分布圖表</strong> - 交互式Plotly圖表</li>
+            <li><strong>位置分布圖</strong> - 服務點地理分布</li>
+            <li><strong>詳細數據表格</strong> - 搜索、過濾、排序</li>
+            <li><strong>數據導出</strong> - CSV格式下載</li>
+            <li><strong>合併分析</strong> - 所有服務點統計</li>
+        </ul>
+        
+        <h3>🔧 技術信息</h3>
+        <div class="code">
+# 運行命令
+streamlit run app.py \
+    --server.port 8502 \
+    --server.address 0.0.0.0 \
+    --server.headless true
+
+# 依賴包
+streamlit==1.28.0
+pandas==2.0.0
+plotly==5.18.0
+requests==2.31.0
+        </div>
+        
+        <h3>📱 手機訪問</h3>
+        <p>在手機瀏覽器輸入：</p>
+        <div class="code">http://192.168.128.62:8502</div>
+        
+        <p style="text-align: center; color: #666; margin-top: 30px;">
+            最後更新: <span id="timestamp"></span>
+        </p>
+    </div>
+    
+    <script>
+        // 更新時間戳
+        document.getElementById('timestamp').textContent = new Date().toLocaleString('zh-HK');
+        
+        // 測試健康狀態
+        fetch('http://localhost:8502/_stcore/health')
+            .then(response => response.text())
+            .then(data => {
+                const element = document.getElementById('health-status');
+                if (data === 'ok') {
+                    element.innerHTML = '<strong>健康檢查:</strong> ✅ 正常 (服務正在運行)';
+                } else {
+                    element.innerHTML = '<strong>健康檢查:</strong> ❌ 異常 (回應: ' + data + ')';
+                    element.className = 'status-item error';
+                }
+            })
+            .catch(error => {
+                document.getElementById('health-status').innerHTML = 
+                    '<strong>健康檢查:</strong> ❌ 失敗 (錯誤: ' + error + ')';
+                document.getElementById('health-status').className = 'status-item error';
+            });
+        
+        // 測試API連接
+        fetch('https://portal.csdi.gov.hk/server/services/common/hkfsd_rcd_1634799003993_7633/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=AmbDepots&outputFormat=geojson&count=1')
+            .then(response => {
+                const element = document.getElementById('api-status');
+                if (response.ok) {
+                    element.innerHTML = '<strong>API連接:</strong> ✅ 正常 (香港政府API可用)';
+                } else {
+                    element.innerHTML = '<strong>API連接:</strong> ❌ 異常 (狀態碼: ' + response.status + ')';
+                    element.className = 'status-item error';
+                }
+            })
+            .catch(error => {
+                document.getElementById('api-status').innerHTML = 
+                    '<strong>API連接:</strong> ❌ 失敗 (網絡錯誤)';
+                document.getElementById('api-status').className = 'status-item error';
+            });
+        
+        // 測試頁面加載
+        fetch('http://localhost:8502')
+            .then(response => {
+                const element = document.getElementById('page-status');
+                if (response.ok) {
+                    element.innerHTML = '<strong>頁面加載:</strong> ✅ 正常 (狀態碼: ' + response.status + ')';
+                } else {
+                    element.innerHTML = '<strong>頁面加載:</strong> ❌ 異常 (狀態碼: ' + response.status + ')';
+                    element.className = 'status-item error';
+                }
+            })
+            .catch(error => {
+                document.getElementById('page-status').innerHTML = 
+                    '<strong>頁面加載:</strong> ❌ 失敗 (無法連接)';
+                document.getElementById('page-status').className = 'status-item error';
+            });
+    </script>
+</body>
+</html>

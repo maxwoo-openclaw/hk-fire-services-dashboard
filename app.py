@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-香港消防處服務儀表板 - Streamlit應用
-顯示救護站和消防局數據
+香港消防處服務儀表板 - 完整最終版本
+包含所有功能：統計、圖表、搜索、過濾、導出
 """
 
 import streamlit as st
 import pandas as pd
-import geopandas as gpd
-import plotly.express as px
-import plotly.graph_objects as go
 import requests
 import json
 from datetime import datetime
-import folium
-from streamlit_folium import folium_static
-import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 
 # 設置頁面配置
 st.set_page_config(
@@ -36,37 +32,30 @@ def fetch_ambulance_data():
         response.raise_for_status()
         data = response.json()
         
-        # 轉換為GeoDataFrame
-        gdf = gpd.GeoDataFrame.from_features(data["features"])
+        records = []
+        for feature in data.get("features", []):
+            props = feature.get("properties", {})
+            records.append({
+                "ID": props.get("OBJECTID"),
+                "消防處編號": props.get("FSDID"),
+                "名稱": props.get("Name_TC"),
+                "英文名稱": props.get("Name_ENG"),
+                "地址": props.get("Address_TC"),
+                "英文地址": props.get("Address_ENG"),
+                "地區": props.get("District_TC"),
+                "英文地區": props.get("District_ENG"),
+                "電話": props.get("Telephone"),
+                "緯度": props.get("Latitude"),
+                "經度": props.get("Longitude"),
+                "類型": "救護站"
+            })
         
-        # 重命名列為中文
-        column_mapping = {
-            'OBJECTID': 'ID',
-            'FSDID': '消防處編號',
-            'Name_TC': '名稱',
-            'Name_ENG': '英文名稱',
-            'Address_TC': '地址',
-            'Address_ENG': '英文地址',
-            'District_TC': '地區',
-            'District_ENG': '英文地區',
-            'Telephone': '電話',
-            'Latitude': '緯度',
-            'Longitude': '經度',
-            'Northing': '北向坐標',
-            'Easting': '東向坐標'
-        }
-        
-        gdf = gdf.rename(columns=column_mapping)
-        
-        # 只保留需要的列
-        columns_to_keep = ['ID', '消防處編號', '名稱', '英文名稱', '地址', '英文地址', 
-                          '地區', '英文地區', '電話', '緯度', '經度', 'geometry']
-        gdf = gdf[[col for col in columns_to_keep if col in gdf.columns]]
-        
-        return gdf
+        df = pd.DataFrame(records)
+        df = df.dropna(subset=['名稱', '地區']).fillna('')
+        return df
     except Exception as e:
         st.error(f"獲取救護站數據失敗: {e}")
-        return None
+        return pd.DataFrame()
 
 @st.cache_data(ttl=3600)
 def fetch_fire_station_data():
@@ -76,118 +65,65 @@ def fetch_fire_station_data():
         response.raise_for_status()
         data = response.json()
         
-        # 轉換為GeoDataFrame
-        gdf = gpd.GeoDataFrame.from_features(data["features"])
+        records = []
+        for feature in data.get("features", []):
+            props = feature.get("properties", {})
+            records.append({
+                "ID": props.get("OBJECTID"),
+                "消防處編號": props.get("FSDID"),
+                "名稱": props.get("Name_TC"),
+                "英文名稱": props.get("Name_ENG"),
+                "地址": props.get("Address_TC"),
+                "英文地址": props.get("Address_ENG"),
+                "地區": props.get("District_TC"),
+                "英文地區": props.get("District_ENG"),
+                "電話": props.get("Telephone"),
+                "緯度": props.get("Latitude"),
+                "經度": props.get("Longitude"),
+                "類型": "消防局"
+            })
         
-        # 重命名列為中文
-        column_mapping = {
-            'OBJECTID': 'ID',
-            'FSDID': '消防處編號',
-            'Name_TC': '名稱',
-            'Name_ENG': '英文名稱',
-            'Address_TC': '地址',
-            'Address_ENG': '英文地址',
-            'District_TC': '地區',
-            'District_ENG': '英文地區',
-            'Telephone': '電話',
-            'Latitude': '緯度',
-            'Longitude': '經度',
-            'Northing': '北向坐標',
-            'Easting': '東向坐標'
-        }
-        
-        gdf = gdf.rename(columns=column_mapping)
-        
-        # 只保留需要的列
-        columns_to_keep = ['ID', '消防處編號', '名稱', '英文名稱', '地址', '英文地址', 
-                          '地區', '英文地區', '電話', '緯度', '經度', 'geometry']
-        gdf = gdf[[col for col in columns_to_keep if col in gdf.columns]]
-        
-        return gdf
+        df = pd.DataFrame(records)
+        df = df.dropna(subset=['名稱', '地區']).fillna('')
+        return df
     except Exception as e:
         st.error(f"獲取消防局數據失敗: {e}")
-        return None
+        return pd.DataFrame()
 
-def create_map(ambulance_gdf, fire_station_gdf):
-    """創建交互式地圖"""
-    # 創建香港中心點的地圖
-    hk_center = [22.3193, 114.1694]
-    m = folium.Map(location=hk_center, zoom_start=11, tiles='CartoDB positron')
+def create_stats(ambulance_df, fire_station_df):
+    """創建統計數據"""
+    stats = {}
     
-    # 添加救護站標記（藍色）
-    if ambulance_gdf is not None and not ambulance_gdf.empty:
-        for idx, row in ambulance_gdf.iterrows():
-            if pd.notnull(row['緯度']) and pd.notnull(row['經度']):
-                popup_html = f"""
-                <div style="font-family: Arial, sans-serif;">
-                    <h4 style="color: #1f77b4; margin-bottom: 5px;">🚑 {row['名稱']}</h4>
-                    <p><strong>地址:</strong> {row['地址']}</p>
-                    <p><strong>地區:</strong> {row['地區']}</p>
-                    <p><strong>電話:</strong> {row['電話']}</p>
-                    <p><strong>消防處編號:</strong> {row['消防處編號']}</p>
-                </div>
-                """
-                folium.Marker(
-                    location=[row['緯度'], row['經度']],
-                    popup=folium.Popup(popup_html, max_width=300),
-                    tooltip=f"救護站: {row['名稱']}",
-                    icon=folium.Icon(color='blue', icon='plus', prefix='fa')
-                ).add_to(m)
+    if not ambulance_df.empty:
+        stats['救護站總數'] = len(ambulance_df)
+        stats['救護站地區數'] = ambulance_df['地區'].nunique()
     
-    # 添加消防局標記（紅色）
-    if fire_station_gdf is not None and not fire_station_gdf.empty:
-        for idx, row in fire_station_gdf.iterrows():
-            if pd.notnull(row['緯度']) and pd.notnull(row['經度']):
-                popup_html = f"""
-                <div style="font-family: Arial, sans-serif;">
-                    <h4 style="color: #d62728; margin-bottom: 5px;">🚒 {row['名稱']}</h4>
-                    <p><strong>地址:</strong> {row['地址']}</p>
-                    <p><strong>地區:</strong> {row['地區']}</p>
-                    <p><strong>電話:</strong> {row['電話']}</p>
-                    <p><strong>消防處編號:</strong> {row['消防處編號']}</p>
-                </div>
-                """
-                folium.Marker(
-                    location=[row['緯度'], row['經度']],
-                    popup=folium.Popup(popup_html, max_width=300),
-                    tooltip=f"消防局: {row['名稱']}",
-                    icon=folium.Icon(color='red', icon='fire', prefix='fa')
-                ).add_to(m)
+    if not fire_station_df.empty:
+        stats['消防局總數'] = len(fire_station_df)
+        stats['消防局地區數'] = fire_station_df['地區'].nunique()
     
-    # 添加圖例
-    legend_html = '''
-    <div style="position: fixed; 
-                bottom: 50px; left: 50px; width: 150px; height: 90px; 
-                background-color: white; border:2px solid grey; z-index:9999; 
-                font-size:14px; padding: 10px; border-radius: 5px;">
-        <p style="margin: 0;"><strong>圖例</strong></p>
-        <p style="margin: 5px 0;"><span style="color: blue;">●</span> 救護站</p>
-        <p style="margin: 5px 0;"><span style="color: red;">●</span> 消防局</p>
-    </div>
-    '''
-    m.get_root().html.add_child(folium.Element(legend_html))
+    if not ambulance_df.empty and not fire_station_df.empty:
+        all_data = pd.concat([ambulance_df, fire_station_df])
+        stats['總服務點數'] = len(all_data)
+        stats['總地區數'] = all_data['地區'].nunique()
     
-    return m
+    return stats
 
-def create_district_chart(ambulance_gdf, fire_station_gdf):
+def create_district_chart(ambulance_df, fire_station_df):
     """創建地區分布圖表"""
-    if ambulance_gdf is None or fire_station_gdf is None:
+    if ambulance_df.empty or fire_station_df.empty:
         return None
     
-    # 統計各地區的救護站數量
-    ambulance_counts = ambulance_gdf['地區'].value_counts().reset_index()
+    ambulance_counts = ambulance_df['地區'].value_counts().reset_index()
     ambulance_counts.columns = ['地區', '救護站數量']
     
-    # 統計各地區的消防局數量
-    fire_station_counts = fire_station_gdf['地區'].value_counts().reset_index()
+    fire_station_counts = fire_station_df['地區'].value_counts().reset_index()
     fire_station_counts.columns = ['地區', '消防局數量']
     
-    # 合併數據
     merged_counts = pd.merge(ambulance_counts, fire_station_counts, on='地區', how='outer').fillna(0)
+    merged_counts = merged_counts.sort_values('救護站數量', ascending=False)
     
-    # 創建柱狀圖
     fig = go.Figure()
-    
     fig.add_trace(go.Bar(
         x=merged_counts['地區'],
         y=merged_counts['救護站數量'],
@@ -196,7 +132,6 @@ def create_district_chart(ambulance_gdf, fire_station_gdf):
         text=merged_counts['救護站數量'],
         textposition='auto'
     ))
-    
     fig.add_trace(go.Bar(
         x=merged_counts['地區'],
         y=merged_counts['消防局數量'],
@@ -207,60 +142,67 @@ def create_district_chart(ambulance_gdf, fire_station_gdf):
     ))
     
     fig.update_layout(
-        title='各地區救護站和消防局數量',
+        title='各地區服務點分布',
         xaxis_title='地區',
         yaxis_title='數量',
         barmode='group',
         height=400,
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
+        showlegend=True
     )
     
     return fig
 
-def create_summary_stats(ambulance_gdf, fire_station_gdf):
-    """創建統計摘要"""
-    stats = {}
+def create_location_map(ambulance_df, fire_station_df):
+    """創建位置散點圖"""
+    if ambulance_df.empty and fire_station_df.empty:
+        return None
     
-    if ambulance_gdf is not None:
-        stats['救護站總數'] = len(ambulance_gdf)
-        stats['救護站地區數'] = ambulance_gdf['地區'].nunique()
-        stats['救護站平均緯度'] = ambulance_gdf['緯度'].mean()
-        stats['救護站平均經度'] = ambulance_gdf['經度'].mean()
+    all_data = pd.DataFrame()
+    if not ambulance_df.empty:
+        all_data = pd.concat([all_data, ambulance_df])
+    if not fire_station_df.empty:
+        all_data = pd.concat([all_data, fire_station_df])
     
-    if fire_station_gdf is not None:
-        stats['消防局總數'] = len(fire_station_gdf)
-        stats['消防局地區數'] = fire_station_gdf['地區'].nunique()
-        stats['消防局平均緯度'] = fire_station_gdf['緯度'].mean()
-        stats['消防局平均經度'] = fire_station_gdf['經度'].mean()
+    # 過濾有效坐標
+    valid_data = all_data.dropna(subset=['緯度', '經度'])
+    if valid_data.empty:
+        return None
     
-    return stats
+    fig = px.scatter(
+        valid_data,
+        x='經度',
+        y='緯度',
+        color='類型',
+        color_discrete_map={'救護站': 'blue', '消防局': 'red'},
+        hover_name='名稱',
+        hover_data=['地址', '地區', '電話'],
+        title='服務點位置分布'
+    )
+    
+    fig.update_layout(
+        height=500,
+        xaxis_title='經度',
+        yaxis_title='緯度'
+    )
+    
+    return fig
 
 def main():
     """主函數"""
     # 頁面標題
     st.title("🚒 香港消防處服務儀表板")
-    st.markdown("顯示香港救護站和消防局的實時數據")
+    st.markdown("### 實時顯示香港救護站和消防局數據")
     
     # 側邊欄
     with st.sidebar:
         st.header("🔧 控制面板")
         
-        st.subheader("數據過濾")
+        st.subheader("數據顯示")
         show_ambulance = st.checkbox("顯示救護站", value=True)
         show_fire_stations = st.checkbox("顯示消防局", value=True)
         
-        st.subheader("地圖設置")
-        map_zoom = st.slider("地圖縮放級別", 9, 15, 11)
-        
         st.subheader("數據更新")
-        if st.button("🔄 刷新數據"):
+        if st.button("🔄 刷新數據", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
         
@@ -271,20 +213,26 @@ def main():
         - **消防局數據**: [香港政府地理數據平台](https://portal.csdi.gov.hk)
         """)
         
-        st.markdown("### 📅 最後更新")
-        st.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        st.markdown("### 📅 系統信息")
+        st.write(f"最後更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        st.markdown("---")
+        st.markdown("### 🚨 緊急聯繫")
+        st.write("**緊急電話: 999**")
+        st.write("消防處熱線: 2723 2233")
     
     # 加載數據
     with st.spinner("正在加載數據..."):
-        ambulance_gdf = fetch_ambulance_data() if show_ambulance else None
-        fire_station_gdf = fetch_fire_station_data() if show_fire_stations else None
+        ambulance_df = fetch_ambulance_data() if show_ambulance else pd.DataFrame()
+        fire_station_df = fetch_fire_station_data() if show_fire_stations else pd.DataFrame()
     
     # 顯示統計摘要
     st.header("📈 統計摘要")
     
-    if ambulance_gdf is not None or fire_station_gdf is not None:
-        stats = create_summary_stats(ambulance_gdf, fire_station_gdf)
+    if not ambulance_df.empty or not fire_station_df.empty:
+        stats = create_stats(ambulance_df, fire_station_df)
         
+        # 創建指標卡片
         col1, col2, col3, col4 = st.columns(4)
         
         if '救護站總數' in stats:
@@ -303,30 +251,31 @@ def main():
             with col4:
                 st.metric("消防局地區數", stats['消防局地區數'])
     
-    # 顯示地圖
-    st.header("🗺️ 服務位置地圖")
-    
-    if show_ambulance or show_fire_stations:
-        m = create_map(ambulance_gdf, fire_station_gdf)
-        folium_static(m, width=1200, height=600)
-    else:
-        st.warning("請至少選擇一種服務類型來顯示地圖")
-    
     # 顯示地區分布圖表
-    if ambulance_gdf is not None and fire_station_gdf is not None:
+    if not ambulance_df.empty and not fire_station_df.empty:
         st.header("📊 地區分布")
-        fig = create_district_chart(ambulance_gdf, fire_station_gdf)
+        fig = create_district_chart(ambulance_df, fire_station_df)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
     
-    # 顯示數據表格
+    # 顯示位置分布圖
+    if (not ambulance_df.empty or not fire_station_df.empty):
+        st.header("🗺️ 位置分布")
+        map_fig = create_location_map(ambulance_df, fire_station_df)
+        if map_fig:
+            st.plotly_chart(map_fig, use_container_width=True)
+        else:
+            st.info("無有效坐標數據顯示地圖")
+    
+    # 顯示詳細數據表格
     st.header("📋 詳細數據")
     
+    # 創建選項卡
     tab1, tab2 = st.tabs(["救護站數據", "消防局數據"])
     
     with tab1:
-        if ambulance_gdf is not None:
-            st.subheader("救護站列表")
+        if not ambulance_df.empty:
+            st.subheader(f"救護站列表 ({len(ambulance_df)} 個)")
             
             # 搜索和過濾
             col1, col2 = st.columns(2)
@@ -336,12 +285,12 @@ def main():
             with col2:
                 district_filter = st.multiselect(
                     "按地區過濾",
-                    options=sorted(ambulance_gdf['地區'].unique()),
+                    options=sorted(ambulance_df['地區'].unique()),
                     key="amb_district"
                 )
             
             # 應用過濾
-            filtered_df = ambulance_gdf.copy()
+            filtered_df = ambulance_df.copy()
             if search_term:
                 filtered_df = filtered_df[
                     filtered_df['名稱'].str.contains(search_term, case=False, na=False) |
@@ -353,13 +302,13 @@ def main():
             
             # 顯示表格
             st.dataframe(
-                filtered_df.drop(columns=['geometry']).reset_index(drop=True),
+                filtered_df[['名稱', '地址', '地區', '電話', '緯度', '經度']].reset_index(drop=True),
                 use_container_width=True,
                 height=400
             )
             
             # 下載按鈕
-            csv = filtered_df.drop(columns=['geometry']).to_csv(index=False).encode('utf-8-sig')
+            csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
                 label="📥 下載救護站數據 (CSV)",
                 data=csv,
@@ -370,8 +319,8 @@ def main():
             st.info("未加載救護站數據")
     
     with tab2:
-        if fire_station_gdf is not None:
-            st.subheader("消防局列表")
+        if not fire_station_df.empty:
+            st.subheader(f"消防局列表 ({len(fire_station_df)} 個)")
             
             # 搜索和過濾
             col1, col2 = st.columns(2)
@@ -381,12 +330,12 @@ def main():
             with col2:
                 district_filter = st.multiselect(
                     "按地區過濾",
-                    options=sorted(fire_station_gdf['地區'].unique()),
+                    options=sorted(fire_station_df['地區'].unique()),
                     key="fire_district"
                 )
             
             # 應用過濾
-            filtered_df = fire_station_gdf.copy()
+            filtered_df = fire_station_df.copy()
             if search_term:
                 filtered_df = filtered_df[
                     filtered_df['名稱'].str.contains(search_term, case=False, na=False) |
@@ -398,13 +347,13 @@ def main():
             
             # 顯示表格
             st.dataframe(
-                filtered_df.drop(columns=['geometry']).reset_index(drop=True),
+                filtered_df[['名稱', '地址', '地區', '電話', '緯度', '經度']].reset_index(drop=True),
                 use_container_width=True,
                 height=400
             )
             
             # 下載按鈕
-            csv = filtered_df.drop(columns=['geometry']).to_csv(index=False).encode('utf-8-sig')
+            csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
                 label="📥 下載消防局數據 (CSV)",
                 data=csv,
@@ -414,8 +363,41 @@ def main():
         else:
             st.info("未加載消防局數據")
     
+    # 顯示合併數據
+    if not ambulance_df.empty and not fire_station_df.empty:
+        st.header("🔗 合併數據分析")
+        
+        all_data = pd.concat([ambulance_df, fire_station_df])
+        
+        # 地區統計
+        st.subheader("各地區服務點總數")
+        district_summary = all_data.groupby('地區').size().reset_index(name='服務點數量')
+        district_summary = district_summary.sort_values('服務點數量', ascending=False)
+        
+        st.dataframe(
+            district_summary,
+            use_container_width=True,
+            height=300
+        )
+        
+        # 下載合併數據
+        csv_all = all_data.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 下載所有數據 (CSV)",
+            data=csv_all,
+            file_name=f"香港消防處所有服務點_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+    
     # 頁腳
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: gray;">
-        <p>
+        <p>香港消防處服務儀表板 • 數據來源: 香港政府地理數據平台</p>
+        <p>最後更新: {}</p>
+        <p>版本: 1.0 • <a href="https://github.com/maxwoo-openclaw/hk-fire-services-dashboard" target="_blank">GitHub項目</a></p>
+    </div>
+    """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
