@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-香港消防處服務儀表板 - 簡單包含地圖版本
+香港消防處服務儀表板 - 增強版本
+添加橫行統計摘要和表格過濾功能
 """
 
 import streamlit as st
@@ -8,8 +9,6 @@ import pandas as pd
 import requests
 import json
 from datetime import datetime
-import plotly.express as px
-import plotly.graph_objects as go
 import folium
 from streamlit_folium import folium_static
 
@@ -110,6 +109,7 @@ def create_interactive_map(ambulance_df, fire_station_df, zoom=11):
                     <p><strong>地址:</strong> {row['地址']}</p>
                     <p><strong>地區:</strong> {row['地區']}</p>
                     <p><strong>電話:</strong> {row['電話']}</p>
+                    <p><strong>消防處編號:</strong> {row['消防處編號']}</p>
                     <p><small>坐標: {row['緯度']:.6f}, {row['經度']:.6f}</small></p>
                 </div>
                 """
@@ -131,6 +131,7 @@ def create_interactive_map(ambulance_df, fire_station_df, zoom=11):
                     <p><strong>地址:</strong> {row['地址']}</p>
                     <p><strong>地區:</strong> {row['地區']}</p>
                     <p><strong>電話:</strong> {row['電話']}</p>
+                    <p><strong>消防處編號:</strong> {row['消防處編號']}</p>
                     <p><small>坐標: {row['緯度']:.6f}, {row['經度']:.6f}</small></p>
                 </div>
                 """
@@ -165,7 +166,7 @@ def main():
     """主函數"""
     # 頁面標題
     st.title("🚒 香港消防處服務儀表板")
-    st.markdown("### 包含真正交互式地圖 - 實時顯示香港救護站和消防局數據")
+    st.markdown("### 增強版本 - 橫行統計摘要 + 表格過濾功能")
     
     # 側邊欄
     with st.sidebar:
@@ -182,23 +183,97 @@ def main():
         if st.button("🔄 刷新數據", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### 📊 數據來源")
+        st.markdown("""
+        - **救護站數據**: [香港政府地理數據平台](https://portal.csdi.gov.hk)
+        - **消防局數據**: [香港政府地理數據平台](https://portal.csdi.gov.hk)
+        """)
+        
+        st.markdown("### 📅 系統信息")
+        st.write(f"最後更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        st.markdown("---")
+        st.markdown("### 🚨 緊急聯繫")
+        st.write("**緊急電話: 999**")
+        st.write("消防處熱線: 2723 2233")
     
     # 加載數據
     with st.spinner("正在加載數據..."):
         ambulance_df = fetch_ambulance_data() if show_ambulance else pd.DataFrame()
         fire_station_df = fetch_fire_station_data() if show_fire_stations else pd.DataFrame()
     
-    # 顯示統計摘要
+    # 顯示橫行統計摘要
     st.header("📈 統計摘要")
     
-    if not ambulance_df.empty:
-        st.metric("救護站總數", len(ambulance_df))
+    # 計算統計數據
+    ambulance_count = len(ambulance_df) if not ambulance_df.empty else 0
+    fire_station_count = len(fire_station_df) if not fire_station_df.empty else 0
+    total_count = ambulance_count + fire_station_count
     
-    if not fire_station_df.empty:
-        st.metric("消防局總數", len(fire_station_df))
+    # 使用Streamlit的columns創建橫行顯示
+    col1, col2, col3 = st.columns(3)
     
-    if not ambulance_df.empty and not fire_station_df.empty:
-        st.metric("總服務點數", len(ambulance_df) + len(fire_station_df))
+    with col1:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #1f77b4 0%, #2c8fd6 100%);
+                border-radius: 15px;
+                padding: 25px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                transition: transform 0.3s ease;
+            ">
+                <div style="font-size: 36px; margin-bottom: 10px;">🚑</div>
+                <div style="font-size: 48px; font-weight: bold; margin: 10px 0;">{ambulance_count}</div>
+                <div style="font-size: 18px; opacity: 0.9;">救護站總數</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    with col2:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #d62728 0%, #ff4d4d 100%);
+                border-radius: 15px;
+                padding: 25px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                transition: transform 0.3s ease;
+            ">
+                <div style="font-size: 36px; margin-bottom: 10px;">🚒</div>
+                <div style="font-size: 48px; font-weight: bold; margin: 10px 0;">{fire_station_count}</div>
+                <div style="font-size: 18px; opacity: 0.9;">消防局總數</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    with col3:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+                border-radius: 15px;
+                padding: 25px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                transition: transform 0.3s ease;
+            ">
+                <div style="font-size: 36px; margin-bottom: 10px;">📊</div>
+                <div style="font-size: 48px; font-weight: bold; margin: 10px 0;">{total_count}</div>
+                <div style="font-size: 18px; opacity: 0.9;">總服務點數</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
     
     # 顯示交互式地圖
     st.header("🗺️ 交互式地圖")
@@ -223,32 +298,100 @@ def main():
     else:
         st.info("請選擇要顯示的數據類型")
     
-    # 顯示詳細數據表格
-    st.header("📋 詳細數據")
+    # 顯示詳細數據表格（帶過濾功能）
+    st.header("📋 詳細數據（帶過濾功能）")
     
-    if not ambulance_df.empty:
-        st.subheader(f"救護站列表 ({len(ambulance_df)} 個)")
-        st.dataframe(
-            ambulance_df[['名稱', '地址', '地區', '電話']].reset_index(drop=True),
-            use_container_width=True,
-            height=300
-        )
+    # 創建選項卡
+    tab1, tab2 = st.tabs(["救護站數據", "消防局數據"])
     
-    if not fire_station_df.empty:
-        st.subheader(f"消防局列表 ({len(fire_station_df)} 個)")
-        st.dataframe(
-            fire_station_df[['名稱', '地址', '地區', '電話']].reset_index(drop=True),
-            use_container_width=True,
-            height=300
-        )
+    with tab1:
+        if not ambulance_df.empty:
+            st.subheader(f"救護站列表 ({len(ambulance_df)} 個)")
+            
+            # 創建過濾選項
+            with st.expander("🔍 過濾選項", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # 名稱搜索
+                    name_search = st.text_input(
+                        "搜索救護站名稱",
+                        key="amb_name_search",
+                        placeholder="輸入名稱關鍵字..."
+                    )
+                
+                with col2:
+                    # 地址搜索
+                    address_search = st.text_input(
+                        "搜索救護站地址",
+                        key="amb_address_search",
+                        placeholder="輸入地址關鍵字..."
+                    )
+                
+                with col3:
+                    # 地區過濾
+                    districts = sorted(ambulance_df['地區'].unique())
+                    district_filter = st.multiselect(
+                        "按地區過濾救護站",
+                        options=districts,
+                        key="amb_district_filter",
+                        placeholder="選擇地區..."
+                    )
+            
+            # 應用過濾
+            filtered_df = ambulance_df.copy()
+            
+            if name_search:
+                filtered_df = filtered_df[
+                    filtered_df['名稱'].str.contains(name_search, case=False, na=False)
+                ]
+            
+            if address_search:
+                filtered_df = filtered_df[
+                    filtered_df['地址'].str.contains(address_search, case=False, na=False)
+                ]
+            
+            if district_filter:
+                filtered_df = filtered_df[filtered_df['地區'].isin(district_filter)]
+            
+            # 顯示過濾結果統計
+            if len(filtered_df) != len(ambulance_df):
+                st.success(f"✅ 找到 {len(filtered_df)} 個救護站（已過濾 {len(ambulance_df) - len(filtered_df)} 個）")
+            
+            # 顯示數據表格
+            if not filtered_df.empty:
+                st.dataframe(
+                    filtered_df[['名稱', '地址', '地區', '電話', '緯度', '經度']].reset_index(drop=True),
+                    use_container_width=True,
+                    height=400,
+                    column_config={
+                        "名稱": st.column_config.TextColumn("名稱", width="medium"),
+                        "地址": st.column_config.TextColumn("地址", width="large"),
+                        "地區": st.column_config.TextColumn("地區", width="small"),
+                        "電話": st.column_config.TextColumn("電話", width="small"),
+                        "緯度": st.column_config.NumberColumn("緯度", format="%.6f"),
+                        "經度": st.column_config.NumberColumn("經度", format="%.6f")
+                    }
+                )
+                
+                # 下載按鈕
+                csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📥 下載救護站數據 (CSV)",
+                    data=csv,
+                    file_name=f"香港救護站數據_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    key="amb_download"
+                )
+            else:
+                st.warning("⚠️ 沒有找到符合條件的救護站")
+        else:
+            st.info("未加載救護站數據")
     
-    # 頁腳
-    st.markdown("---")
-    st.markdown(f"""
-    <div style="text-align: center; color: gray;">
-        <p>香港消防處服務儀表板 • 最後更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+    with tab2:
+        if not fire_station_df.empty:
+            st.subheader(f"消防局列表 ({len(fire_station_df)} 個)")
+            
+            # 創建過濾選項
+            with st.expander("🔍 過濾選項", expanded=True):
+                col1, col2, col3
